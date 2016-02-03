@@ -726,6 +726,23 @@ void setup() {
 return (String)counter++;
 }
 */
+String getResponse(int minRSSI){
+	int n = WiFi.scanNetworks();
+	String response;
+	response.reserve(10);
+		for (int i = 0; i < n; ++i) {
+			String current_ssid = WiFi.SSID(i);
+			int index = current_ssid.indexOf(MY_PREFIX);
+			String target_chip_id = current_ssid.substring(index + sizeof(MY_PREFIX));
+			/* creat response string with all nearby rssi's and ssid's*/
+	if (index != -1 && (target_chip_id != Hkey.substring(0, Hkeypart)) && abs(WiFi.RSSI(i)) < minRSSI ) {
+		response += current_ssid;
+		response += "=";
+		response =response + abs(WiFi.RSSI(i))+",";
+			}
+		}
+		return response;
+}
 long double timers = 0;
 void loop() {
 	Serial.printf("%d <- reqCnt TotQ-> %d \n", requestCounter, totalQuery);
@@ -735,56 +752,13 @@ void loop() {
 
 	if (WiFi.status() != WL_CONNECTED){
 		connectToNode(70);
-		}
-	if ((WiFi.status() == WL_CONNECTED) && (connection == TO_ROUTER || connection == INTERNET)) {
-		//for now it is assumed the data is only relay status
-		delay(500);
-		//PROCESS TABLE REQUESTS HERE from internet
-		if (requestCounter == totalQuery){
-			//run my request
-			String path = "/index.php?Hkey=";
-			path += Hkey;
-			path += "&Ukey=";
-			path += Ukey;
-			path += "&data="; //this contains the relay status
-			path += "command";//this could be sensor values and other stuff
-			String recv = sendGET(URL, PORT, path.c_str(), path.length());
-			if (recv != ERROR1 && recv.indexOf("@") != -1){
-				//Serial.println(recv);
-				//please check for relevant error codes
-				Command cmd(recv);
-				cmd.separate(Hkey);
-			}
-			requestCounter = 0;
-		}
-		else if (requestCounter < totalQuery){
-			move2query(++requestCounter);
-			//run the current query if it doesnt have a valid response 
-			if ((String)currentQuery->response == (String)(Server_WaitResponse + (String)currentQuery->HID + "@")){
-				String path = "/index.php?Hkey=";
-				path += currentQuery->HID;
-				path += "&Ukey=";
-				path += Ukey;
-				path += "&data="; //this contains the relay status
-				path += currentQuery->ques;//this could be sensor values and other stuff
-				Serial.println(path);
-				String recv = sendGET(URL, PORT, path.c_str(), path.length());
-				if (recv != (String)(Server_WaitResponse + (String)currentQuery->HID + "@") && recv != ERROR1 && recv.indexOf("@") != -1){
-					//please check for relevant error codes
-					//valid response 
-					connection = INTERNET;
-					editQuery(currentQuery->HID, recv.c_str(), currentQuery->ques);
-				}
-
-			}
-		}
-		else { requestCounter = 0; }
 	}
-	else if (WiFi.status() == WL_CONNECTED && connection == TO_MESH){
-		WiFi.mode(WIFI_STA);
+
+	if (WiFi.status() == WL_CONNECTED && connection == TO_MESH){
+//		WiFi.mode(WIFI_STA);
 		delay(100);
 		//PROCESS TABLE REQUESTS HERE from mesh basically forward your requests
-		if (requestCounter == totalQuery){
+		
 			//run my request
 			//String path = SERVER_IP_ADDR;
 			String path;
@@ -792,41 +766,15 @@ void loop() {
 			//			path += SERVER_PORT;
 			path += "/mesh?Hof=";
 			path += Hkey;
-			path += "&ques="; //this contains the relay status
-			path += "command";//this could be sensor values and other stuff
+			path += "&state="; 
+			path += getResponse();//this could be sensor values and other stuff
 			String recv = sendGET(SERVER_IP_ADDR, SERVER_PORT, path.c_str(), path.length());
-			if (recv != (String)(Server_WaitResponse + (String)currentQuery->HID + "@") && recv != ERROR1){
-				//please check for relevant error codes
-				Command cmd(recv);
-				cmd.separate(Hkey);
-			}
-			requestCounter = 0;
-		}
-
-		else if (requestCounter < totalQuery){
-			move2query(++requestCounter);
-			if ((String)currentQuery->response == (String)(Server_WaitResponse + (String)currentQuery->HID + "@")){
-				String path = "/mesh?Hof=";
-				path += currentQuery->HID;
-				path += "&ques="; //this contains the relay status
-				path += currentQuery->ques;
-				String recv = sendGET(SERVER_IP_ADDR, SERVER_PORT, path.c_str(), path.length());
-				Serial.println(recv);
-				if (recv != (String)(Server_WaitResponse + (String)currentQuery->HID + "@") && recv != ERROR1){
-					editQuery(currentQuery->HID, recv.c_str(), currentQuery->ques);
-				}
-				else {
-					//wait response by server, do nothing just skip this query and retry later
-				}
-			}
-		}
-		WiFi.disconnect();
-		WiFi.mode(WIFI_AP_STA);
-		delay(1000);
+		
 	}
-
-
 }
+
+
+
 
 
 
