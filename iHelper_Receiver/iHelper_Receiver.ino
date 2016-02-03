@@ -265,254 +265,6 @@ void setStatus(byte relayno, byte status) {
 
 }
 
-void checkSchedule(byte hour, byte minute, byte status) {
-	//  current time in 24h format is
-	//will do checking of all schedules here using relay mode
-	Serial.println(hour);
-	Serial.println(minute);
-	Serial.println("----");
-	int times[NUMRELAY][4] = { 0 };
-	for (byte rel = 0; rel < NUMRELAY; rel++) {
-		if (RELAYmodes[rel] == 'S') {
-			int k = OFFSET + (NUMRELAY * 2) + (rel * 32) + (status * 16);
-			for (byte i = 0; i < 4; i++) {
-				for (byte j = 0; j < 4; j++) {
-					times[rel][i] = (times[rel][i] * 10) + (EEPROM.read(k + j + 4 * i) - '0');
-				}
-			}
-
-			for (byte i = 0; i < 4; i++) {
-				//           Serial.println(times[rel][i])   ;
-				if (times[rel][i] == ((hour * 100) + minute) && RELAYstatus[rel] != status) { /*turn status relay*/
-					setStatus(rel + 1, status);
-				}
-			}
-
-		}
-	}
-}
-
-
-class Command {
-public:
-	Command(String incoming) {
-		start = incoming.indexOf("<"); end = incoming.indexOf(">", start + 1);
-		byte i = 0;
-		if (start != 255 && end != 255) {
-			byte temp = start; //stores previousindex of ","
-			for (i = 0; i < 12; i++) {
-				temp = incoming.indexOf(",", temp + 1);
-				if (commas[i - 1] == temp || temp == 255) {
-					break;
-				}
-				commas[i] = temp;
-			}
-		}
-		NumVar = i + 1;
-		command = incoming;
-		//      Serial.println(command);
-	}
-	//------------------------------------------------------------------------------------------------
-	void separate(String Hkey) {
-		byte relayno; byte status = 255;
-		String temp = command.substring(start + 1, commas[0]);
-		//            Serial.println(Hkey);
-		//            Serial.println(start);
-		//            Serial.println(commas[0]);
-		//            Serial.println(temp);
-		//            Serial.println(command);
-		if (temp.indexOf(Hkey) != -1) {
-
-			//please check recvACK
-			switch (NumVar) {
-			case 3:
-				temp = command.substring(commas[0] + 1, commas[1]);
-
-				if (temp[0] - '0' > 0 && temp[0] - '0' < 9) {
-					relayno = temp[0] - '0';
-					temp = command.substring(commas[1] + 1, commas[2]);
-					if (temp[0] == (int)'R') {
-						/*SET to manual mode*/
-						setMode(relayno, 'M');
-					}
-				}
-				break; //optional
-			case 4:
-				temp = command.substring(commas[0] + 1, commas[1]);
-				if (temp[0] == (int)'C') {
-					ComType = 2;
-					temp = command.substring(commas[1] + 1, commas[2]);
-					if (temp[0] == (int)'I') {
-						temp = command.substring(commas[2] + 1, end);
-						ChangeID(temp.c_str());
-					}
-				}
-
-				else if (temp[0] == (int)'G') {
-					ComType = 2;
-					//get wtf
-				}
-				else if (temp[0] - '0' > 0 && temp[0] - '0' < 9) {
-					relayno = temp[0] - '0'; ComType = 1;
-					temp = command.substring(commas[1] + 1, commas[2]);
-
-					if (temp[0] == (int)'M') {
-						if (RELAYmodes[relayno - 1] == 'M') {
-							temp = command.substring(commas[2] + 1, end);
-							if (temp[0] == (int)'O') {
-								setStatus(relayno, 1);
-							}
-							else if (temp[0] == (int)'F') {
-								if (relayno == NUMRELAY) {
-									//                      noTone(RELAYstart + NUMRELAY - 1);
-									//                      alarm = 0;
-								}
-								setStatus(relayno, 0);
-							}
-
-						}
-						else if (RELAYmodes[relayno - 1] == 'S') {
-							//sendCommand(Hkey, "E2");
-							//                String ack = "<";
-							//                  ack = ack + ID + ",E2>";
-							//                  wifi.send(ack.c_str(), ack.length());
-							//                  could use this code for the class#consider making a function
-							//send relay scheduled plese remove schedule E2=error code
-						}
-
-					}
-					else if (temp[0] == (int)'G') {
-						//get schedule
-						char times[4][4];
-						//                if (EEPROM.read(OFFSET + NUMRELAY + relayno - 1 ) == (int)'S')
-						temp = command.substring(commas[2] + 1, end);
-						if (temp[0] == (int)'O') {
-							status = 1;
-						}
-						else if (temp[0] == (int)'F') {
-							status = 0;
-						}
-						int k = OFFSET + (NUMRELAY * 2) + ((relayno - 1) * 32) + (status * 16);
-						for (byte i = 0; i < 4; i++) {
-							for (byte j = 0; j < 4; j++) {
-								times[i][j] = EEPROM.read(k + j + 4 * i);
-							}
-						}
-						String resp = "<";
-						resp = resp + Hkey + ',' + (char)(relayno + '0') + ",S," + temp[0]
-							+ ',' + times[0][0] + times[0][1] + times[0][2] + times[0][3]
-							+ ',' + times[1][0] + times[1][1] + times[1][2] + times[1][3]
-							+ ',' + times[2][0] + times[2][1] + times[2][2] + times[2][3]
-							+ ',' + times[3][0] + times[3][1] + times[3][2] + times[3][3] + '>';
-						//	sendGET(resp.c_str(), resp.length());//customm send
-
-						if (EEPROM.read(OFFSET + NUMRELAY + relayno - 1) == (int)'M')  {
-							/*not on schedule response
-							String ack = "<";
-							ack = ack + Hkey + ",E1>";
-							sendGET(ack.c_str(), ack.length());
-							*/
-						}
-					}
-				}
-				break; //optional
-
-			case 8:
-				temp = command.substring(commas[0] + 1, commas[1]);
-				if (temp[0] - '0' > 0 && temp[0] - '0' < 9) {
-					relayno = temp[0] - '0'; ComType = 1;
-					temp = command.substring(commas[1] + 1, commas[2]);
-					if (temp[0] == (int)'S') {
-						//set schedule
-						byte state = 0;
-						temp = command.substring(commas[2] + 1, commas[3]);
-						if (temp[0] == (int)'O') {
-							state = 1;
-						}
-						else if (temp[0] == (int)'F') {
-							state = 0;
-						}
-						const char times[][4] = {
-							{ command.substring(commas[3] + 1, commas[4] + 1)[0], command.substring(commas[3] + 1, commas[4] + 1)[1], command.substring(commas[3] + 1, commas[4] + 1)[2], command.substring(commas[3] + 1, commas[4] + 1)[3] },
-							{ command.substring(commas[4] + 1, commas[5] + 1)[0], command.substring(commas[4] + 1, commas[5] + 1)[1], command.substring(commas[4] + 1, commas[5] + 1)[2], command.substring(commas[4] + 1, commas[5] + 1)[3] },
-							{ command.substring(commas[5] + 1, commas[6] + 1)[0], command.substring(commas[5] + 1, commas[6] + 1)[1], command.substring(commas[5] + 1, commas[6] + 1)[2], command.substring(commas[5] + 1, commas[6] + 1)[3] },
-							{ command.substring(commas[6] + 1, end)[0], command.substring(commas[6] + 1, end)[1], command.substring(commas[6] + 1, end)[2], command.substring(commas[6] + 1, end)[3] }
-						};
-						setSchedule(relayno, state, times);
-					}
-				}
-
-				else if (temp[0] == (int)'C') {
-					/*change something*/
-					temp = command.substring(commas[1] + 1, commas[2]);
-					if (temp[0] == (int)'T') {
-						/*change time*/
-						const byte RTCtime[5] = {
-							command.substring(commas[2] + 1, commas[3]).toInt(),//dd
-							command.substring(commas[3] + 1, commas[4]).toInt(),//mm
-							command.substring(commas[4] + 1, commas[5]).toInt(),//yy
-							command.substring(commas[5] + 1, commas[6]).toInt(),//hh
-							command.substring(commas[6] + 1, end).toInt()//mm
-						};
-						//    setDS3231time(00, RTCtime[4], RTCtime[3], 0, RTCtime[0], RTCtime[1], RTCtime[2]);
-						//^^removed until rtc
-					}
-				}
-				break;
-
-			}// switch scope ends here
-		}//ID check ends here
-	}
-private:
-	void setStatus(byte relayno, byte status) {
-
-		if (relayno <= NUMRELAY) {
-			EEPROM.write(OFFSET - 1 + relayno, status);
-			RELAYstatus[relayno - 1] = status;
-			digitalWrite(RELAYstart + relayno - 1, status);
-			USE_SERIAL.printf("SetStatus = %d , %d \n", relayno, status);
-		}
-		EEPROM.commit();
-
-	}
-	void setMode(byte relayno, char mode) {
-		if (relayno <= NUMRELAY) {
-			EEPROM.write(OFFSET + NUMRELAY + relayno - 1, mode);
-			RELAYmodes[relayno - 1] = mode;
-			USE_SERIAL.printf("setMode= %d , %d\n", relayno, mode);
-		}
-		EEPROM.commit();
-	}
-
-
-	void setSchedule(byte relayno, char status, const char times[4][4]) {
-		EEPROM.write(OFFSET + NUMRELAY + relayno - 1, 'S');
-		RELAYmodes[relayno - 1] = 'S';
-		int k = OFFSET + (NUMRELAY * 2) + ((relayno - 1) * 32) + (status * 16);
-		for (byte i = 0; i < 4; i++) {
-			for (byte j = 0; j<4; j++){
-				EEPROM.write(k + 4 * i + j, times[i][j]);
-			}
-		}
-		USE_SERIAL.printf("setschedule= %d , %d \n", relayno, status);
-		EEPROM.commit();
-	}
-	void ChangeID(const char* id) {
-		for (byte i = 0; i < IDend; i++) {
-			EEPROM.write(i, (char)id[i]);
-			Hkey[i] = id[i];
-		}
-		USE_SERIAL.print("changeID=");
-		USE_SERIAL.println(id);
-		EEPROM.commit();
-	}
-	byte NumVar;
-	String command;
-	byte ComType = 0;
-	byte start, end;
-	byte commas[12];
-};
-
 
 void configuration()
 {
@@ -522,7 +274,7 @@ void configuration()
 	if (key == Hkey){
 		Ukey = server.arg("Ukey");
 		for (byte i = 0; i < Ukeylen; i++){ EEPROM.write(IDend + i, Ukey[i]); }
-		WiFi.disconnect(true);
+		WiFi.disconnect();
 		WiFi.begin(ssid.c_str(), password.c_str());
 		if (WiFi.waitForConnectResult() == WL_CONNECTED){
 
@@ -553,14 +305,14 @@ void configuration()
 	//the ukey can be checked against whether an original purchase has been made r not
 	EEPROM.commit();
 }
-
+/*
 void command() {
 	String recvCommand = server.arg("command");
 	Command cmd(recvCommand);//cost to memory is 112 bytes of ram
 	cmd.separate(Hkey);
 	server.send(200, "text/html", "ACK babe");
 }
-
+*/
 void manageMesh(){
 	String Hof = server.arg("Hof");
 	String question = server.arg("ques");
@@ -623,15 +375,18 @@ bool connectToNode(byte minRSSI){
 	for (int i = 0; i < n; ++i) {
 		String current_ssid = WiFi.SSID(i);
 		int index = current_ssid.indexOf(MY_PREFIX);
-
-		String target_chip_id = current_ssid.substring(index + sizeof(MY_PREFIX));
+		
+		String target_chip_id = current_ssid.substring(index + sizeof(MY_PREFIX)-1);
 		/* Connect to any _suitable_ APs which contain _ssid_prefix */
-		if (index != -1 && (target_chip_id != Hkey.substring(0, Hkeypart)) && abs(WiFi.RSSI(i)) < minRSSI && checkPriority(target_chip_id)) {
-
+		if (index != -1 && (target_chip_id != Hkey.substring(0, Hkeypart)) && abs(WiFi.RSSI(i)) < minRSSI ) {
 			if (WiFi.status() != WL_CONNECTED){
 				WiFi.disconnect();
 				WiFi.begin(current_ssid.c_str(), MY_PWD);
+				ssid = current_ssid;
+				password = MY_PWD;
+				delay(2000);
 			}
+
 			if (WiFi.waitForConnectResult() != WL_CONNECTED){ continue; }
 			else{ return true; }
 		}
@@ -695,7 +450,7 @@ void setup() {
 		Serial.printf("%d -> %c \n", i, (char)EEPROM.read(i));
 	}
 
-	USE_SERIAL.setDebugOutput(true);
+	//USE_SERIAL.setDebugOutput(true);
 	WiFi.softAP(((String)MY_PREFIX + Hkey.substring(0, Hkeypart)).c_str(), ((String)MY_PWD).c_str());
 	WiFi.mode(WIFI_AP_STA);
 	Serial.println(Hkey.c_str());
@@ -704,10 +459,10 @@ void setup() {
 	Serial.println(password.c_str());
 	connectToNode(70);
 	//server.on("/command", HTTP_GET, command);
-	//server.on("/config", HTTP_GET, configuration);
+	server.on("/config", HTTP_GET, configuration);
 	//server.on("/mesh", HTTP_GET, manageMesh);
 	//server.on("/connect", HTTP_GET, connectNode);
-	//server.begin();
+	server.begin();
 	for (uint8_t t = 5; t > 0 && WiFi.status()!=WL_CONNECTED; t--) {
 		USE_SERIAL.printf("SETUP connecting to router %d...\n", t);
 		USE_SERIAL.flush();
@@ -751,11 +506,14 @@ void loop() {
 	//please call checkschedule every minute or so
 
 	if (WiFi.status() != WL_CONNECTED){
-		connectToNode(70);
+		connectToNode(65);
 	}
-
+	else{
+		if (WiFi.SSID().indexOf(MY_PREFIX) == 0 && password.compareTo(MY_PWD) == 0){ connection = TO_MESH; }
+		else{ connection = TO_ROUTER; }
+	}
 	if (WiFi.status() == WL_CONNECTED && connection == TO_MESH){
-//		WiFi.mode(WIFI_STA);
+		WiFi.mode(WIFI_STA);
 		delay(100);
 		//PROCESS TABLE REQUESTS HERE from mesh basically forward your requests
 		
@@ -767,9 +525,11 @@ void loop() {
 			path += "/mesh?Hof=";
 			path += Hkey;
 			path += "&state="; 
-			path += getResponse();//this could be sensor values and other stuff
+			path += getResponse(65);//this could be sensor values and other stuff
 			String recv = sendGET(SERVER_IP_ADDR, SERVER_PORT, path.c_str(), path.length());
-		
+			delay(100);
+			WiFi.mode(WIFI_AP_STA);
+			
 	}
 }
 
